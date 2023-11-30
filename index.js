@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 const axios = require('axios');
 const yargs = require('yargs');
+const ansiHtml = require('ansi-html');
+const fs = require('fs').promises;
+const { exec } = require('child_process');
 
 const argv = yargs
   .options({
@@ -23,22 +26,43 @@ const argv = yargs
 
 const makeRequest = async (url, req) => {
   try {
-    if (req.toLowerCase() === 'get') {
-      const response = await axios.get(url);
-      return response.data;
-    } else if (req.toLowerCase() === 'post') {
-      const response = await axios.post(url);
-      return response.data;
-    }
+    const response = await axios({
+      method: req.toLowerCase(),
+      url: url,
+      responseType: 'arraybuffer',
+    });
+    return {
+      data: response.data,
+      contentType: response.headers['content-type'],
+    };
   } catch (error) {
-    return `Error: ${error.message}`;
+    return {
+      error: `Error: ${error.message}`,
+    };
+  }
+};
+
+const displayContent = async (content, contentType) => {
+  if (contentType && contentType.startsWith('text')) {
+    const ansiHtmlContent = ansiHtml(content.toString());
+    console.log(ansiHtmlContent);
+  } else {
+    console.log('Binary content, saving to file and opening in default app.');
+    const filename = 'downloaded_file';
+    await fs.writeFile(filename, content);
+    exec(`start ${filename}`);
   }
 };
 
 const main = async () => {
   const { url, req } = argv;
-  const response = await makeRequest(url, req);
-  console.log(response);
+  const { data, contentType, error } = await makeRequest(url, req);
+
+  if (error) {
+    console.error(error);
+  } else {
+    await displayContent(data, contentType);
+  }
 };
 
 main();
